@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Bayes Machine PRO MAX</title>
+
+<style>
+body{
+  margin:0;
+  font-family:Segoe UI;
+  background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+  color:white;
+  text-align:center;
+}
+
+h1{margin:15px}
+
+.panel{
+  background:rgba(255,255,255,0.1);
+  padding:12px;
+  margin:10px;
+  border-radius:15px;
+}
+
+.container{
+  display:flex;
+  justify-content:center;
+  gap:40px;
+}
+
+.box{
+  width:320px;
+  min-height:220px;
+  background:rgba(255,255,255,0.1);
+  border-radius:20px;
+  padding:10px;
+}
+
+.dice{font-size:90px;margin:10px;}
+
+.card{
+  display:inline-block;
+  width:36px;height:36px;
+  line-height:36px;
+  margin:3px;
+  border-radius:8px;
+  background:white;color:black;
+  font-weight:bold;
+}
+
+button{
+  padding:7px 12px;
+  margin:4px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.tree{
+  text-align:left;
+  white-space:pre;
+  font-family:monospace;
+  background:rgba(0,0,0,0.4);
+  padding:10px;
+  border-radius:10px;
+}
+
+.prob-container{
+  display:flex;
+  gap:10px;
+}
+.prob-container .panel{width:32%;}
+
+@media (max-width:768px){
+  .prob-container{flex-direction:column;}
+  .prob-container .panel{width:100%;}
+}
+
+#logTable{
+  width:100%;
+  border-collapse:collapse;
+}
+#logTable th,#logTable td{
+  border:1px solid white;
+  padding:6px;
+}
+#logTable tr:nth-child(even){
+  background:rgba(255,255,255,0.1);
+}
+</style>
+</head>
+
+<body>
+<h1>TRƯỜNG THPT NAM ĐÔNG</h1>
+<h1>TỔ TOÁN</h1>
+<h1>🎯Mô phỏng tung xúc xắc và rút thẻ</h1>
+
+<div class="container">
+
+<div class="box">
+<h3>🎲 Xúc xắc</h3>
+<div id="dice" class="dice">⚀</div>
+<button onclick="rollDice()">Gieo</button>
+<input id="nRoll" type="number" value="10" style="width:60px">
+<button onclick="rollMany()">Gieo N lần</button>
+</div>
+
+<div class="box">
+<h3>🔤 Chữ cái</h3>
+<div id="box2"></div>
+<button onclick="createLetters()">Tạo 26 chữ</button>
+<button onclick="shuffleLetters()">🔀 Xáo chữ</button>
+<button onclick="drawLetter()">🎯 Rút chữ</button>
+</div>
+
+</div>
+
+<div class="panel">
+<button onclick="drawByDice()">🎯🎲 Rút chữ theo xúc xắc</button>
+<button onclick="resetAll()">Reset</button><br>
+
+<label><input type="radio" name="mode" value="noReplace" checked> Không hoàn lại</label>
+<label><input type="radio" name="mode" value="replace"> Có hoàn lại</label>
+</div>
+
+<!-- 3 CỘT -->
+<div class="prob-container">
+
+<div class="panel">
+<h3>🎲 Xác suất xúc xắc</h3>
+<div id="pDice">Chưa gieo</div>
+</div>
+
+<div class="panel">
+<h3>🔤 Xác suất rút chữ</h3>
+<div id="pLetter">Chưa rút</div>
+</div>
+
+<div class="panel">
+<h3>🎯 Xác suất có điều kiện</h3>
+<div id="pCond">Chưa rút</div>
+</div>
+
+</div>
+
+<!-- cây -->
+<div class="panel">
+<h3>🌳 Cây Bayes realtime</h3>
+<div id="tree" class="tree">Chưa có dữ liệu</div>
+</div>
+
+<!-- bảng dữ liệu -->
+<div class="panel">
+<h3>📊 Bảng dữ liệu thực nghiệm</h3>
+
+<table id="logTable">
+<tr>
+<th>Lần</th>
+<th>Xúc xắc</th>
+<th>Chữ</th>
+<th>Loại</th>
+<th>Ghi chú</th>
+</tr>
+</table>
+
+</div>
+
+<script>
+
+const diceFaces=["⚀","⚁","⚂","⚃","⚄","⚅"];
+
+let diceValue=null;
+let letters=[];
+
+let diceCount=[0,0,0,0,0,0], diceTotal=0;
+let letterCount={}, letterTotal=0;
+let condCount={}, condTotal={};
+
+let lastLetter=null;
+let step=1;
+
+// ===== TABLE =====
+function addRow(dice, letter, type, note=""){
+  logTable.innerHTML+=`
+  <tr>
+    <td>${step++}</td>
+    <td>${dice??"-"}</td>
+    <td>${letter??"-"}</td>
+    <td>${type}</td>
+    <td>${note}</td>
+  </tr>`;
+}
+
+// ===== LETTER =====
+function createLetters(){
+  letters=[];
+  for(let i=65;i<=90;i++){
+    let l=String.fromCharCode(i);
+    letters.push(l);
+    letterCount[l]=0;
+  }
+  renderLetters();
+}
+
+function renderLetters(){
+  box2.innerHTML="";
+  letters.forEach(l=>{
+    let d=document.createElement("div");
+    d.className="card";
+    d.innerText=l;
+    box2.appendChild(d);
+  });
+}
+
+function shuffleLetters(){
+  letters.sort(()=>Math.random()-0.5);
+  renderLetters();
+  addRow("-","-","Xáo chữ");
+}
+
+// ===== DICE =====
+function rollDice(){
+  diceValue=Math.floor(Math.random()*6);
+  dice.innerText=diceFaces[diceValue];
+
+  diceCount[diceValue]++;
+  diceTotal++;
+
+  addRow(diceValue+1,"-","Gieo xúc xắc");
+  updateAll();
+}
+
+function rollMany(){
+  let n=parseInt(nRoll.value);
+  for(let i=0;i<n;i++) rollDice();
+}
+
+// ===== DRAW =====
+function drawLetter(){
+  if(!letters.length) return;
+
+  let idx=Math.floor(Math.random()*letters.length);
+  let l=letters[idx];
+
+  lastLetter=l;
+  letterCount[l]++;
+  letterTotal++;
+
+  addRow("-",l,"Rút độc lập");
+  updateAll();
+}
+
+// 🔥 SỬA CHÍNH: RÚT 1 CHỮ THEO XÚC XẮC
+function drawByDice(){
+  if(diceValue===null || !letters.length) return;
+
+  let k=diceValue+1;
+
+  let idx=Math.floor(Math.random()*letters.length);
+  let l=letters[idx];
+
+  lastLetter=l;
+  letterCount[l]++;
+  letterTotal++;
+
+  let key=k+"_"+l;
+  condCount[key]=(condCount[key]||0)+1;
+  condTotal[diceValue]=(condTotal[diceValue]||0)+1;
+
+  addRow(k,l,"Có điều kiện","1 lần");
+
+  updateAll();
+}
+
+// ===== UPDATE =====
+function updateAll(){
+
+// 🎲 CHỈ HIỂN THỊ 1 MẶT
+if(diceValue!==null){
+
+  let count=diceCount[diceValue];
+  let exp=(count/diceTotal).toFixed(2);
+  let theo=(1/6).toFixed(2);
+
+  pDice.innerText=`
+🎲 Mặt ${diceValue+1}
+- Xuất hiện: ${count}
+- XSTN: ${exp}
+- XSLT: ${theo}
+`;
+}
+
+// 🔤 chữ
+if(lastLetter){
+  let count=letterCount[lastLetter]||0;
+  let exp=(count/letterTotal).toFixed(2);
+  let theo=(1/26).toFixed(2);
+
+  pLetter.innerText=`
+🔤 ${lastLetter}
+- Xuất hiện: ${count}
+- XSTN: ${exp}
+- XSLT: ${theo}
+`;
+}
+
+// 🎯 điều kiện
+if(lastLetter && diceValue!==null){
+  let k=diceValue+1;
+  let key=k+"_"+lastLetter;
+
+  let c=condCount[key]||0;
+  let t=condTotal[diceValue]||1;
+
+  let exp=(c/t).toFixed(2);
+  let theo=(1/26).toFixed(2);
+
+  pCond.innerText=`
+🎯 Mặt ${k} → ${lastLetter}
+- XSTN: ${exp}
+- XSLT: ${theo}
+`;
+}
+
+updateTree();
+}
+
+// ===== TREE =====
+function updateTree(){
+  let txt="🎲\n";
+  for(let i=0;i<6;i++){
+    let p=(diceCount[i]/diceTotal||0).toFixed(2);
+    txt+=`${i+1} (${p})\n`;
+
+    for(let k in condCount){
+      let [d,l]=k.split("_");
+      if(d==i+1){
+        let p2=(condCount[k]/condTotal[i]).toFixed(2);
+        txt+=`  └─ ${l} (${p2})\n`;
+      }
+    }
+  }
+  tree.innerText=txt;
+}
+
+// ===== RESET =====
+function resetAll(){
+  diceValue=null; letters=[];
+  diceCount=[0,0,0,0,0,0]; diceTotal=0;
+  letterCount={}; letterTotal=0;
+  condCount={}; condTotal={};
+  lastLetter=null;
+  step=1;
+
+  dice.innerText="⚀";
+  box2.innerHTML="";
+  tree.innerText="Chưa có dữ liệu";
+
+  pDice.innerText="Chưa gieo";
+  pLetter.innerText="Chưa rút";
+  pCond.innerText="Chưa rút";
+
+  logTable.innerHTML=`
+  <tr>
+  <th>Lần</th>
+  <th>Xúc xắc</th>
+  <th>Chữ</th>
+  <th>Loại</th>
+  <th>Ghi chú</th>
+  </tr>`;
+}
+
+</script>
+
+</body>
+</html>
